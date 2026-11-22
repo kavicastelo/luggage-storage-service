@@ -1,0 +1,5 @@
+import { FastifyError, FastifyReply, FastifyRequest } from "fastify";
+import { AppError } from "../errors/app-error.js";
+export declare function errorHandler(error: FastifyError | AppError | Error, request: FastifyRequest, reply: FastifyReply): FastifyReply<import("fastify").RouteGenericInterface, import("fastify").RawServerDefault, import("http").IncomingMessage, import("http").ServerResponse<import("http").IncomingMessage>, unknown, import("fastify").FastifySchema, import("fastify").FastifyTypeProviderDefault, unknown>;
+export declare function notFoundHandler(request: FastifyRequest, reply: FastifyReply): FastifyReply<import("fastify").RouteGenericInterface, import("fastify").RawServerDefault, import("http").IncomingMessage, import("http").ServerResponse<import("http").IncomingMessage>, unknown, import("fastify").FastifySchema, import("fastify").FastifyTypeProviderDefault, unknown>;
+//# sourceMappingURL=error-handler.d.ts.map

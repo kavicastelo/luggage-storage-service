@@ -1,0 +1,130 @@
+import { CreateCapacityPoolRequestSchema, UpdateCapacityPoolRequestSchema, createSuccessResponse, SYSTEM_PERMISSIONS } from "@luggage-storage/contracts";
+import { capacityService } from "./capacity.service.js";
+export async function capacityRoutes(app) {
+    // 1. Get capacity pools for a location
+    app.get("/locations/:locationId/capacity-pools", {
+        preHandler: [
+            app.authenticate,
+            app.requireAnyPermission([
+                SYSTEM_PERMISSIONS.HOSTS_LOCATION_READ_OWN,
+                SYSTEM_PERMISSIONS.ADMIN_LOCATION_READ
+            ])
+        ],
+        schema: {
+            description: "Retrieve all capacity pools configured for a storage location",
+            tags: ["Capacity"],
+            params: {
+                type: "object",
+                required: ["locationId"],
+                properties: {
+                    locationId: { type: "string", format: "uuid" }
+                }
+            }
+        }
+    }, async (request, reply) => {
+        const { locationId } = request.params;
+        const pools = await capacityService.getCapacityPools(locationId, {
+            userId: request.user.sub,
+            roles: request.user.roles,
+            clientInfo: {
+                ip: request.ip,
+                userAgent: request.headers["user-agent"],
+                correlationId: request.headers["x-correlation-id"] || request.id
+            }
+        });
+        return reply.status(200).send(createSuccessResponse({ pools }, request.id));
+    });
+    // 2. Add capacity pool
+    app.post("/locations/:locationId/capacity-pools", {
+        preHandler: [
+            app.authenticate,
+            app.requirePermission(SYSTEM_PERMISSIONS.HOSTS_LOCATION_CONFIGURE)
+        ],
+        schema: {
+            description: "Create a new capacity pool for a storage location",
+            tags: ["Capacity"],
+            params: {
+                type: "object",
+                required: ["locationId"],
+                properties: {
+                    locationId: { type: "string", format: "uuid" }
+                }
+            }
+        }
+    }, async (request, reply) => {
+        const { locationId } = request.params;
+        const body = CreateCapacityPoolRequestSchema.parse(request.body);
+        const pool = await capacityService.createCapacityPool(locationId, body, {
+            userId: request.user.sub,
+            roles: request.user.roles,
+            clientInfo: {
+                ip: request.ip,
+                userAgent: request.headers["user-agent"],
+                correlationId: request.headers["x-correlation-id"] || request.id
+            }
+        });
+        return reply.status(201).send(createSuccessResponse(pool, request.id));
+    });
+    // 3. Update capacity pool
+    app.patch("/capacity-pools/:poolId", {
+        preHandler: [
+            app.authenticate,
+            app.requirePermission(SYSTEM_PERMISSIONS.HOSTS_LOCATION_CONFIGURE)
+        ],
+        schema: {
+            description: "Update quota units or settings of a capacity pool",
+            tags: ["Capacity"],
+            params: {
+                type: "object",
+                required: ["poolId"],
+                properties: {
+                    poolId: { type: "string", format: "uuid" }
+                }
+            }
+        }
+    }, async (request, reply) => {
+        const { poolId } = request.params;
+        const body = UpdateCapacityPoolRequestSchema.parse(request.body);
+        const pool = await capacityService.updateCapacityPool(poolId, body, {
+            userId: request.user.sub,
+            roles: request.user.roles,
+            clientInfo: {
+                ip: request.ip,
+                userAgent: request.headers["user-agent"],
+                correlationId: request.headers["x-correlation-id"] || request.id
+            }
+        });
+        return reply.status(200).send(createSuccessResponse(pool, request.id));
+    });
+    // 4. Delete capacity pool
+    app.delete("/capacity-pools/:poolId", {
+        preHandler: [
+            app.authenticate,
+            app.requirePermission(SYSTEM_PERMISSIONS.HOSTS_LOCATION_CONFIGURE)
+        ],
+        schema: {
+            description: "Delete a capacity pool from a storage location",
+            tags: ["Capacity"],
+            params: {
+                type: "object",
+                required: ["poolId"],
+                properties: {
+                    poolId: { type: "string", format: "uuid" }
+                }
+            }
+        }
+    }, async (request, reply) => {
+        const { poolId } = request.params;
+        await capacityService.deleteCapacityPool(poolId, {
+            userId: request.user.sub,
+            roles: request.user.roles,
+            clientInfo: {
+                ip: request.ip,
+                userAgent: request.headers["user-agent"],
+                correlationId: request.headers["x-correlation-id"] || request.id
+            }
+        });
+        return reply.status(200).send(createSuccessResponse({ removed: true, poolId }, request.id));
+    });
+}
+//# sourceMappingURL=capacity.routes.js.map

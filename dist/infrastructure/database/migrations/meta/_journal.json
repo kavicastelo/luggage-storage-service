@@ -1,0 +1,146 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1794031783504,
+      "tag": "0000_outgoing_thunderbolt_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794079122395,
+      "tag": "0001_empty_puff_adder",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794085669779,
+      "tag": "0002_marvelous_hercules",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794096000000,
+      "tag": "0003_system_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794100000000,
+      "tag": "0004_permissions_and_rbac",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794150000000,
+      "tag": "0005_stabilization_verification_and_rate_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794273000000,
+      "tag": "0006_marketplace_phase_a",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794276000000,
+      "tag": "0007_phase_a_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794350000000,
+      "tag": "0008_phase_a_final_security_gate",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794360000000,
+      "tag": "0009_phase_a_trusted_identity_boundary",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794370000000,
+      "tag": "0010_phase_a_identity_secret_provisioning_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794380000000,
+      "tag": "0011_phase_a_final_security_corrections",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794390000000,
+      "tag": "0012_phase_b_booking_escrow_custody",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794400000000,
+      "tag": "0013_phase_b_custody_hmac_and_payment_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794500000000,
+      "tag": "0014_phase_b_refund_evidence_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794600000000,
+      "tag": "0015_payhere_channel_aware_intents",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794700000000,
+      "tag": "0016_initiative_3_host_staff_rbac",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794800000000,
+      "tag": "0017_initiative_4_custody_evidence_uploads",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794900000000,
+      "tag": "0018_initiative_6_payouts_and_support",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795000000000,
+      "tag": "0019_payment_infrastructure_transformation",
+      "breakpoints": true
+    }
+  ]
+}

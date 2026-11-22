@@ -1,0 +1,324 @@
+import { z } from "zod";
+// ============================================================================
+// Enums & Constants
+// ============================================================================
+export const LOCATION_STATUSES = [
+    "DRAFT",
+    "PENDING_REVIEW",
+    "ACTIVE",
+    "DISABLED",
+    "REJECTED"
+];
+export const BOOKING_MODES = ["INSTANT", "HOST_APPROVAL"];
+export const LOCATION_AMENITIES = [
+    "CCTV",
+    "WIFI",
+    "AIR_CONDITIONING",
+    "GROUND_FLOOR",
+    "SECURITY_SEALS",
+    "LOCKERS",
+    "STAFF_ON_DUTY",
+    "WHEELCHAIR_ACCESSIBLE"
+];
+export const STORAGE_ZONE_TYPES = [
+    "LOCKER",
+    "BACKROOM",
+    "FRONT_DESK",
+    "BASEMENT",
+    "RACK",
+    "OTHER"
+];
+export const STORAGE_SECURITY_TIERS = ["STANDARD", "HIGH_SECURITY"];
+export const OPENING_HOURS_EXCEPTION_TYPES = ["CLOSURE", "SPECIAL_HOURS"];
+// ============================================================================
+// Entities & Models
+// ============================================================================
+export const LocationMediaSchema = z.object({
+    id: z.string().uuid(),
+    locationId: z.string().uuid(),
+    fileKey: z.string(),
+    url: z.string().url(),
+    mediaType: z.literal("IMAGE").default("IMAGE"),
+    caption: z.string().nullable().optional(),
+    isPrimary: z.boolean().default(false),
+    sortOrder: z.number().int().default(0),
+    createdAt: z.string(),
+    updatedAt: z.string()
+});
+export const StorageZoneSchema = z.object({
+    id: z.string().uuid(),
+    locationId: z.string().uuid(),
+    name: z.string(),
+    zoneType: z.enum(STORAGE_ZONE_TYPES),
+    securityTier: z.enum(STORAGE_SECURITY_TIERS),
+    isActive: z.boolean(),
+    createdAt: z.string(),
+    updatedAt: z.string()
+});
+export const OpeningHoursSchema = z.object({
+    id: z.string().uuid(),
+    locationId: z.string().uuid(),
+    dayOfWeek: z.number().int().min(1).max(7), // 1=Mon ... 7=Sun
+    openTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Time must be HH:MM or HH:MM:SS"),
+    closeTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Time must be HH:MM or HH:MM:SS"),
+    allowsDropoff: z.boolean().default(true),
+    allowsCollection: z.boolean().default(true),
+    isClosed: z.boolean().default(false),
+    createdAt: z.string(),
+    updatedAt: z.string()
+});
+export const OpeningHoursExceptionSchema = z.object({
+    id: z.string().uuid(),
+    locationId: z.string().uuid(),
+    exceptionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+    exceptionType: z.enum(OPENING_HOURS_EXCEPTION_TYPES),
+    openTime: z.string().nullable().optional(),
+    closeTime: z.string().nullable().optional(),
+    reason: z.string().nullable().optional(),
+    createdAt: z.string(),
+    updatedAt: z.string()
+});
+/**
+ * Full storage location entity for Host Owners and Superadmin views.
+ * Contains private exact address and exact coordinates.
+ */
+export const StorageLocationSchema = z.object({
+    id: z.string().uuid(),
+    businessId: z.string().uuid(),
+    name: z.string(),
+    description: z.string().nullable().optional(),
+    addressLine1: z.string(),
+    addressLine2: z.string().nullable().optional(),
+    city: z.string(),
+    postalCode: z.string().nullable().optional(),
+    countryCode: z.string().length(2).default("LK"),
+    latitude: z.number(),
+    longitude: z.number(),
+    timezone: z.string().default("Asia/Colombo"),
+    bookingMode: z.enum(BOOKING_MODES),
+    acceptsOversized: z.boolean().default(false),
+    amenities: z.array(z.string()).default([]),
+    status: z.enum(LOCATION_STATUSES),
+    rejectionReason: z.string().nullable().optional(),
+    adminNotes: z.string().nullable().optional(),
+    reviewedBy: z.string().uuid().nullable().optional(),
+    reviewedAt: z.string().nullable().optional(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    images: z.array(LocationMediaSchema).default([]),
+    zones: z.array(StorageZoneSchema).default([]),
+    openingHours: z.array(OpeningHoursSchema).default([]),
+    exceptions: z.array(OpeningHoursExceptionSchema).default([])
+});
+/**
+ * Public storage location model strictly protecting address privacy per OQ-012.
+ * Never exposes exact street address, building number, or exact coordinates.
+ */
+export const PublicStorageLocationSchema = z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    description: z.string().nullable().optional(),
+    city: z.string(),
+    countryCode: z.string().length(2),
+    approximateArea: z.string(),
+    approximateLatitude: z.number(),
+    approximateLongitude: z.number(),
+    distanceMeters: z.number().optional(),
+    timezone: z.string(),
+    bookingMode: z.enum(BOOKING_MODES),
+    acceptsOversized: z.boolean(),
+    amenities: z.array(z.string()),
+    status: z.literal("ACTIVE"),
+    primaryImageUrl: z.string().nullable().optional(),
+    images: z.array(z.object({
+        id: z.string().uuid(),
+        url: z.string().url(),
+        caption: z.string().nullable().optional(),
+        isPrimary: z.boolean(),
+        sortOrder: z.number().int().nonnegative().optional()
+    })).default([]),
+    baseRateMinor: z.number().int().positive().optional(),
+    currency: z.string().default("LKR"),
+    averageRating: z.number().min(0).max(5).nullable().default(null),
+    reviewCount: z.number().int().nonnegative().default(0),
+    is24Hours: z.boolean().default(false),
+    operatingHoursStatus: z
+        .enum(["CONFIGURED", "UNCONFIGURED", "PARTIAL", "CLOSED", "OPEN_24_HOURS"])
+        .default("UNCONFIGURED"),
+    operatingHoursSummary: z.string().nullable().default(null)
+});
+export const OPERATING_HOURS_STATUSES = [
+    "CONFIGURED",
+    "UNCONFIGURED",
+    "PARTIAL",
+    "CLOSED",
+    "OPEN_24_HOURS"
+];
+export const OperatingHoursStatusSchema = z.enum(OPERATING_HOURS_STATUSES);
+/**
+ * Computes an explicit, non-fabricated operating-hours summary from persisted opening_hours rows.
+ */
+export function summarizeOpeningHours(hours) {
+    if (hours.length === 0) {
+        return {
+            is24Hours: false,
+            operatingHoursStatus: "UNCONFIGURED",
+            operatingHoursSummary: null
+        };
+    }
+    const configuredDayCount = new Set(hours.map((h, index) => h.dayOfWeek ?? index)).size;
+    const validOpenDays = hours.filter((h) => !h.isClosed && Boolean(h.openTime) && Boolean(h.closeTime));
+    const firstOpen = validOpenDays[0];
+    if (configuredDayCount < 7) {
+        if (!firstOpen) {
+            return {
+                is24Hours: false,
+                operatingHoursStatus: "PARTIAL",
+                operatingHoursSummary: "Partial schedule (closed on configured days)"
+            };
+        }
+        return {
+            is24Hours: false,
+            operatingHoursStatus: "PARTIAL",
+            operatingHoursSummary: `${firstOpen.openTime.slice(0, 5)} - ${firstOpen.closeTime.slice(0, 5)} (Partial schedule)`
+        };
+    }
+    if (!firstOpen) {
+        return {
+            is24Hours: false,
+            operatingHoursStatus: "CLOSED",
+            operatingHoursSummary: "Closed"
+        };
+    }
+    const isAll24Hours = validOpenDays.length === hours.length &&
+        validOpenDays.every((h) => h.openTime.startsWith("00:00") &&
+            (h.closeTime.startsWith("23:59") || h.closeTime.startsWith("24:00")));
+    if (isAll24Hours) {
+        return {
+            is24Hours: true,
+            operatingHoursStatus: "OPEN_24_HOURS",
+            operatingHoursSummary: "24/7 Open"
+        };
+    }
+    const firstWindow = `${firstOpen.openTime.slice(0, 5)} - ${firstOpen.closeTime.slice(0, 5)}`;
+    const allSameWindow = validOpenDays.every((h) => `${h.openTime.slice(0, 5)} - ${h.closeTime.slice(0, 5)}` === firstWindow);
+    return {
+        is24Hours: false,
+        operatingHoursStatus: "CONFIGURED",
+        operatingHoursSummary: allSameWindow ? firstWindow : `${firstWindow} (Varies by day)`
+    };
+}
+// ============================================================================
+// Request Schemas
+// ============================================================================
+export const CreateLocationRequestSchema = z.object({
+    businessId: z.string().uuid("Valid business ID is required"),
+    name: z.string().trim().min(2, "Name must be at least 2 characters").max(255),
+    description: z.string().trim().max(2000).optional().nullable(),
+    addressLine1: z.string().trim().min(3, "Address line 1 is required").max(255),
+    addressLine2: z.string().trim().max(255).optional().nullable(),
+    city: z.string().trim().min(2, "City is required").max(100),
+    postalCode: z.string().trim().max(20).optional().nullable(),
+    countryCode: z.string().trim().length(2).default("LK"),
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    timezone: z.string().trim().default("Asia/Colombo"),
+    bookingMode: z.enum(BOOKING_MODES).default("INSTANT"),
+    acceptsOversized: z.boolean().default(false),
+    amenities: z.array(z.string()).default([])
+});
+export const UpdateLocationRequestSchema = CreateLocationRequestSchema.partial().omit({ businessId: true });
+export const OpeningHourItemInputSchema = z.object({
+    dayOfWeek: z.number().int().min(1).max(7),
+    openTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Format HH:MM or HH:MM:SS"),
+    closeTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Format HH:MM or HH:MM:SS"),
+    allowsDropoff: z.boolean().default(true),
+    allowsCollection: z.boolean().default(true),
+    isClosed: z.boolean().default(false)
+});
+export const SetOpeningHoursRequestSchema = z.object({
+    schedules: z.array(OpeningHourItemInputSchema).min(1, "At least one schedule day required")
+});
+export const CreateOpeningHoursExceptionRequestSchema = z
+    .object({
+    exceptionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format YYYY-MM-DD"),
+    exceptionType: z.enum(OPENING_HOURS_EXCEPTION_TYPES).default("CLOSURE"),
+    openTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/).optional().nullable(),
+    closeTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/).optional().nullable(),
+    reason: z.string().trim().max(255).optional().nullable()
+})
+    .refine((data) => {
+    if (data.exceptionType === "SPECIAL_HOURS") {
+        if (!data.openTime || !data.closeTime) {
+            return false;
+        }
+        return data.openTime < data.closeTime;
+    }
+    return true;
+}, {
+    message: "SPECIAL_HOURS exceptions require valid openTime and closeTime with openTime before closeTime",
+    path: ["openTime"]
+});
+export const CreateStorageZoneRequestSchema = z.object({
+    name: z.string().trim().min(2).max(128),
+    zoneType: z.enum(STORAGE_ZONE_TYPES).default("BACKROOM"),
+    securityTier: z.enum(STORAGE_SECURITY_TIERS).default("STANDARD"),
+    isActive: z.boolean().default(true)
+});
+export const UpdateStorageZoneRequestSchema = CreateStorageZoneRequestSchema.partial();
+export const AddLocationMediaRequestSchema = z.object({
+    fileKey: z.string().min(1),
+    url: z.string().url(),
+    caption: z.string().trim().max(255).optional().nullable(),
+    isPrimary: z.boolean().default(false),
+    sortOrder: z.number().int().default(0)
+});
+export const UpdateLocationMediaRequestSchema = z.object({
+    caption: z.string().trim().max(255).nullable().optional(),
+    isPrimary: z.boolean().optional(),
+    sortOrder: z.number().int().nonnegative().optional()
+});
+export const ReviewLocationRequestSchema = z.object({
+    decision: z.enum(["APPROVE", "REJECT"]),
+    rejectionReason: z.string().trim().max(1000).optional().nullable(),
+    adminNotes: z.string().trim().max(1000).optional().nullable()
+}).refine((data) => {
+    if (data.decision === "REJECT") {
+        return Boolean(data.rejectionReason && data.rejectionReason.length > 0);
+    }
+    return true;
+}, {
+    message: "A rejection reason is required when rejecting a location",
+    path: ["rejectionReason"]
+});
+// ============================================================================
+// Response Schemas
+// ============================================================================
+export const StorageLocationListResponseSchema = z.object({
+    locations: z.array(StorageLocationSchema)
+});
+export const LocationModerationQueueQuerySchema = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    status: z.enum([...LOCATION_STATUSES, "ALL"]).optional()
+});
+export const LocationModerationQueueItemSchema = z.object({
+    locationId: z.string().uuid(),
+    businessId: z.string().uuid(),
+    businessName: z.string(),
+    legalBusinessName: z.string().optional(),
+    businessStatus: z.string().optional(),
+    ownerEmail: z.string().optional(),
+    ownerDisplayName: z.string().optional(),
+    name: z.string(),
+    city: z.string(),
+    addressLine1: z.string(),
+    status: z.enum(LOCATION_STATUSES),
+    imageCount: z.number().int(),
+    submittedAt: z.string()
+});
+export const LocationModerationQueueResponseSchema = z.object({
+    queue: z.array(LocationModerationQueueItemSchema),
+    total: z.number().int()
+});
+//# sourceMappingURL=index.js.map

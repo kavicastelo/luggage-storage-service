@@ -1,0 +1,69 @@
+import { ConfigurePricingPolicyRequestSchema, createSuccessResponse, SYSTEM_PERMISSIONS } from "@luggage-storage/contracts";
+import { pricingService } from "./pricing.service.js";
+export async function pricingRoutes(app) {
+    // 1. Get pricing policy for location
+    app.get("/locations/:locationId/pricing", {
+        preHandler: [
+            app.authenticate,
+            app.requireAnyPermission([
+                SYSTEM_PERMISSIONS.HOSTS_LOCATION_READ_OWN,
+                SYSTEM_PERMISSIONS.ADMIN_LOCATION_READ
+            ])
+        ],
+        schema: {
+            description: "Retrieve active pricing policy and bag category rates for a location",
+            tags: ["Pricing"],
+            params: {
+                type: "object",
+                required: ["locationId"],
+                properties: {
+                    locationId: { type: "string", format: "uuid" }
+                }
+            }
+        }
+    }, async (request, reply) => {
+        const { locationId } = request.params;
+        const policy = await pricingService.getPricingPolicy(locationId, {
+            userId: request.user.sub,
+            roles: request.user.roles,
+            clientInfo: {
+                ip: request.ip,
+                userAgent: request.headers["user-agent"],
+                correlationId: request.headers["x-correlation-id"] || request.id
+            }
+        });
+        return reply.status(200).send(createSuccessResponse(policy, request.id));
+    });
+    // 2. Configure pricing policy
+    app.put("/locations/:locationId/pricing", {
+        preHandler: [
+            app.authenticate,
+            app.requirePermission(SYSTEM_PERMISSIONS.HOSTS_LOCATION_CONFIGURE)
+        ],
+        schema: {
+            description: "Configure or update pricing policy and category rates for a location",
+            tags: ["Pricing"],
+            params: {
+                type: "object",
+                required: ["locationId"],
+                properties: {
+                    locationId: { type: "string", format: "uuid" }
+                }
+            }
+        }
+    }, async (request, reply) => {
+        const { locationId } = request.params;
+        const body = ConfigurePricingPolicyRequestSchema.parse(request.body);
+        const policy = await pricingService.configurePricingPolicy(locationId, body, {
+            userId: request.user.sub,
+            roles: request.user.roles,
+            clientInfo: {
+                ip: request.ip,
+                userAgent: request.headers["user-agent"],
+                correlationId: request.headers["x-correlation-id"] || request.id
+            }
+        });
+        return reply.status(200).send(createSuccessResponse(policy, request.id));
+    });
+}
+//# sourceMappingURL=pricing.routes.js.map

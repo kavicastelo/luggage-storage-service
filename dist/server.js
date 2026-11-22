@@ -1,0 +1,43 @@
+import { buildApp } from "./app.js";
+import { env } from "./config/env.js";
+import { logger } from "./infrastructure/logging/logger.js";
+import { dbPool } from "./infrastructure/database/connection.js";
+async function main() {
+    const app = buildApp();
+    // Graceful shutdown handler
+    const shutdown = async (signal) => {
+        logger.info(`Received ${signal}. Starting graceful shutdown...`);
+        try {
+            await app.close();
+            await dbPool.end();
+            logger.info("Server and database connections successfully closed.");
+            process.exit(0);
+        }
+        catch (err) {
+            logger.error({ err }, "Error during graceful shutdown");
+            process.exit(1);
+        }
+    };
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
+    try {
+        await app.listen({ port: env.PORT, host: env.HOST });
+        logger.info(`Server listening at http://${env.HOST}:${env.PORT}`);
+        logger.info(`OpenAPI documentation available at http://${env.HOST}:${env.PORT}/docs`);
+        // Self-heal standard role permissions on server start
+        try {
+            const { rbacService } = await import("./modules/auth/rbac.service.js");
+            await rbacService.ensureDefaultRolePermissions();
+            logger.info("Standard RBAC roles and permissions self-healed successfully.");
+        }
+        catch (rbacErr) {
+            logger.warn({ err: rbacErr }, "RBAC default permissions self-heal deferred or failed");
+        }
+    }
+    catch (err) {
+        logger.fatal({ err }, "Failed to start server");
+        process.exit(1);
+    }
+}
+main();
+//# sourceMappingURL=server.js.map

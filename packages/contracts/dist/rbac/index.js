@@ -1,0 +1,230 @@
+import { z } from "zod";
+// ============================================================================
+// System Role & Permission Constants
+// ============================================================================
+export const SYSTEM_ROLES = [
+    "TRAVELLER",
+    "HOST_OWNER",
+    "HOST_STAFF",
+    "SUPPORT",
+    "SUPERADMIN"
+];
+export const SYSTEM_PERMISSIONS = {
+    // Identity domain
+    IDENTITY_PROFILE_READ: "identity.profile.read",
+    IDENTITY_PROFILE_UPDATE: "identity.profile.update",
+    IDENTITY_SESSION_READ_OWN: "identity.session.read_own",
+    IDENTITY_SESSION_REVOKE_OWN: "identity.session.revoke_own",
+    IDENTITY_PASSWORD_CHANGE: "identity.password.change",
+    // Admin user lifecycle & inspection
+    ADMIN_USER_READ: "admin.user.read",
+    ADMIN_USER_SUSPEND: "admin.user.suspend",
+    ADMIN_USER_REINSTATE: "admin.user.reinstate",
+    ADMIN_USER_DEACTIVATE: "admin.user.deactivate",
+    ADMIN_USER_REACTIVATE: "admin.user.reactivate",
+    ADMIN_USER_VERIFY_EMAIL: "admin.user.verify_email",
+    // Admin session management
+    ADMIN_SESSION_READ_ANY: "admin.session.read_any",
+    ADMIN_SESSION_REVOKE_ANY: "admin.session.revoke_any",
+    // Admin role & permission management
+    ADMIN_ROLE_READ: "admin.role.read",
+    ADMIN_ROLE_ASSIGN: "admin.role.assign",
+    ADMIN_ROLE_REVOKE: "admin.role.revoke",
+    ADMIN_PERMISSION_READ: "admin.permission.read",
+    // Admin audit & platform governance
+    ADMIN_AUDIT_READ: "admin.audit.read",
+    ADMIN_PLATFORM_MANAGE: "admin.platform.manage",
+    ADMIN_KYC_MANAGE: "admin.kyc.manage",
+    ADMIN_FINANCIAL_MANAGE: "admin.financial.manage",
+    // Support operations
+    SUPPORT_TICKET_READ: "support.ticket.read",
+    SUPPORT_TICKET_UPDATE: "support.ticket.update",
+    // Hosts & Business domain
+    HOSTS_BUSINESS_CREATE: "hosts.business.create",
+    HOSTS_BUSINESS_READ_OWN: "hosts.business.read_own",
+    HOSTS_BUSINESS_UPDATE_OWN: "hosts.business.update_own",
+    HOSTS_STAFF_READ_OWN: "hosts.staff.read_own",
+    HOSTS_STAFF_MANAGE_OWN: "hosts.staff.manage_own",
+    HOSTS_VERIFICATION_SUBMIT: "hosts.verification.submit",
+    HOSTS_VERIFICATION_READ_OWN: "hosts.verification.read_own",
+    HOSTS_LOCATION_CREATE: "hosts.location.create",
+    HOSTS_LOCATION_READ_OWN: "hosts.location.read_own",
+    HOSTS_LOCATION_UPDATE_OWN: "hosts.location.update_own",
+    HOSTS_LOCATION_SUBMIT: "hosts.location.submit",
+    HOSTS_LOCATION_DISABLE: "hosts.location.disable",
+    HOSTS_LOCATION_CONFIGURE: "hosts.location.configure",
+    // Admin moderation domain
+    ADMIN_HOST_READ: "admin.host.read",
+    ADMIN_HOST_VERIFY: "admin.host.verify",
+    ADMIN_LOCATION_READ: "admin.location.read",
+    ADMIN_LOCATION_MODERATE: "admin.location.moderate",
+    // Upload domain
+    UPLOAD_INITIATE: "upload.initiate",
+    // Traveller bookings domain (Phase B)
+    BOOKINGS_CREATE: "bookings.create",
+    BOOKINGS_READ_OWN: "bookings.read_own",
+    BOOKINGS_CANCEL_OWN: "bookings.cancel_own",
+    // Host booking, custody & finance domain (Phase B)
+    HOSTS_BOOKINGS_READ_OWN: "hosts.bookings.read_own",
+    HOSTS_BOOKINGS_MANAGE_OWN: "hosts.bookings.manage_own",
+    HOSTS_CUSTODY_OPERATE: "hosts.custody.operate",
+    HOSTS_FINANCE_READ_OWN: "hosts.finance.read_own",
+    // Admin booking, payment & refund domain (Phase B)
+    ADMIN_BOOKING_READ: "admin.booking.read",
+    ADMIN_BOOKING_MANAGE: "admin.booking.manage",
+    ADMIN_PAYMENT_READ: "admin.payment.read",
+    ADMIN_REFUND_READ: "admin.refund.read",
+    ADMIN_REFUND_MANAGE: "admin.refund.manage"
+};
+export const PermissionCodeSchema = z.string().min(1).max(64);
+export const DEFAULT_ROLE_PERMISSIONS = {
+    SUPERADMIN: Object.values(SYSTEM_PERMISSIONS),
+    SUPPORT: [
+        SYSTEM_PERMISSIONS.IDENTITY_PROFILE_READ,
+        SYSTEM_PERMISSIONS.IDENTITY_PROFILE_UPDATE,
+        SYSTEM_PERMISSIONS.IDENTITY_SESSION_READ_OWN,
+        SYSTEM_PERMISSIONS.IDENTITY_SESSION_REVOKE_OWN,
+        SYSTEM_PERMISSIONS.IDENTITY_PASSWORD_CHANGE,
+        SYSTEM_PERMISSIONS.ADMIN_USER_READ,
+        SYSTEM_PERMISSIONS.ADMIN_USER_SUSPEND,
+        SYSTEM_PERMISSIONS.ADMIN_USER_REINSTATE,
+        SYSTEM_PERMISSIONS.ADMIN_USER_DEACTIVATE,
+        SYSTEM_PERMISSIONS.ADMIN_USER_REACTIVATE,
+        SYSTEM_PERMISSIONS.ADMIN_USER_VERIFY_EMAIL,
+        SYSTEM_PERMISSIONS.ADMIN_SESSION_READ_ANY,
+        SYSTEM_PERMISSIONS.ADMIN_SESSION_REVOKE_ANY,
+        SYSTEM_PERMISSIONS.ADMIN_ROLE_READ,
+        SYSTEM_PERMISSIONS.ADMIN_PERMISSION_READ,
+        SYSTEM_PERMISSIONS.ADMIN_HOST_READ,
+        SYSTEM_PERMISSIONS.ADMIN_LOCATION_READ,
+        SYSTEM_PERMISSIONS.ADMIN_BOOKING_READ,
+        SYSTEM_PERMISSIONS.ADMIN_PAYMENT_READ,
+        SYSTEM_PERMISSIONS.ADMIN_REFUND_READ,
+        SYSTEM_PERMISSIONS.SUPPORT_TICKET_READ,
+        SYSTEM_PERMISSIONS.SUPPORT_TICKET_UPDATE,
+        SYSTEM_PERMISSIONS.BOOKINGS_READ_OWN
+    ],
+    HOST_OWNER: [
+        SYSTEM_PERMISSIONS.IDENTITY_PROFILE_READ,
+        SYSTEM_PERMISSIONS.IDENTITY_PROFILE_UPDATE,
+        SYSTEM_PERMISSIONS.IDENTITY_SESSION_READ_OWN,
+        SYSTEM_PERMISSIONS.IDENTITY_SESSION_REVOKE_OWN,
+        SYSTEM_PERMISSIONS.IDENTITY_PASSWORD_CHANGE,
+        SYSTEM_PERMISSIONS.HOSTS_BUSINESS_CREATE,
+        SYSTEM_PERMISSIONS.HOSTS_BUSINESS_READ_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_BUSINESS_UPDATE_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_STAFF_READ_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_STAFF_MANAGE_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_VERIFICATION_SUBMIT,
+        SYSTEM_PERMISSIONS.HOSTS_VERIFICATION_READ_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_LOCATION_CREATE,
+        SYSTEM_PERMISSIONS.HOSTS_LOCATION_READ_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_LOCATION_UPDATE_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_LOCATION_SUBMIT,
+        SYSTEM_PERMISSIONS.HOSTS_LOCATION_DISABLE,
+        SYSTEM_PERMISSIONS.HOSTS_LOCATION_CONFIGURE,
+        SYSTEM_PERMISSIONS.HOSTS_BOOKINGS_READ_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_BOOKINGS_MANAGE_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_CUSTODY_OPERATE,
+        SYSTEM_PERMISSIONS.HOSTS_FINANCE_READ_OWN,
+        SYSTEM_PERMISSIONS.BOOKINGS_CREATE,
+        SYSTEM_PERMISSIONS.BOOKINGS_READ_OWN,
+        SYSTEM_PERMISSIONS.BOOKINGS_CANCEL_OWN,
+        SYSTEM_PERMISSIONS.UPLOAD_INITIATE
+    ],
+    HOST_STAFF: [
+        SYSTEM_PERMISSIONS.IDENTITY_PROFILE_READ,
+        SYSTEM_PERMISSIONS.IDENTITY_PROFILE_UPDATE,
+        SYSTEM_PERMISSIONS.IDENTITY_SESSION_READ_OWN,
+        SYSTEM_PERMISSIONS.IDENTITY_SESSION_REVOKE_OWN,
+        SYSTEM_PERMISSIONS.IDENTITY_PASSWORD_CHANGE,
+        SYSTEM_PERMISSIONS.HOSTS_BUSINESS_READ_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_LOCATION_READ_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_BOOKINGS_READ_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_BOOKINGS_MANAGE_OWN,
+        SYSTEM_PERMISSIONS.HOSTS_CUSTODY_OPERATE,
+        SYSTEM_PERMISSIONS.BOOKINGS_CREATE,
+        SYSTEM_PERMISSIONS.BOOKINGS_READ_OWN,
+        SYSTEM_PERMISSIONS.BOOKINGS_CANCEL_OWN,
+        SYSTEM_PERMISSIONS.UPLOAD_INITIATE
+    ],
+    TRAVELLER: [
+        SYSTEM_PERMISSIONS.IDENTITY_PROFILE_READ,
+        SYSTEM_PERMISSIONS.IDENTITY_PROFILE_UPDATE,
+        SYSTEM_PERMISSIONS.IDENTITY_SESSION_READ_OWN,
+        SYSTEM_PERMISSIONS.IDENTITY_SESSION_REVOKE_OWN,
+        SYSTEM_PERMISSIONS.IDENTITY_PASSWORD_CHANGE,
+        SYSTEM_PERMISSIONS.BOOKINGS_CREATE,
+        SYSTEM_PERMISSIONS.BOOKINGS_READ_OWN,
+        SYSTEM_PERMISSIONS.BOOKINGS_CANCEL_OWN,
+        SYSTEM_PERMISSIONS.UPLOAD_INITIATE
+    ]
+};
+// ============================================================================
+// Models
+// ============================================================================
+export const PermissionSchema = z.object({
+    id: z.string().uuid(),
+    code: z.string(),
+    name: z.string(),
+    description: z.string().nullable(),
+    module: z.string(),
+    createdAt: z.string()
+});
+export const RoleDetailSchema = z.object({
+    id: z.string().uuid(),
+    code: z.string(),
+    name: z.string(),
+    description: z.string().nullable(),
+    isSystem: z.boolean(),
+    permissions: z.array(z.string()),
+    createdAt: z.string(),
+    updatedAt: z.string()
+});
+// ============================================================================
+// Request Schemas
+// ============================================================================
+export const AssignUserRoleRequestSchema = z.object({
+    roleCode: z
+        .string()
+        .trim()
+        .min(1, "Role code is required")
+        .max(32, "Role code must not exceed 32 characters")
+});
+export const AssignRolePermissionRequestSchema = z.object({
+    permissionCode: z
+        .string()
+        .trim()
+        .min(1, "Permission code is required")
+        .max(64, "Permission code must not exceed 64 characters")
+});
+// ============================================================================
+// Response Schemas
+// ============================================================================
+export const PermissionListResponseDataSchema = z.object({
+    permissions: z.array(PermissionSchema)
+});
+export const RoleListResponseDataSchema = z.object({
+    roles: z.array(RoleDetailSchema)
+});
+export const AssignUserRoleResponseDataSchema = z.object({
+    userId: z.string().uuid(),
+    roles: z.array(z.string()),
+    message: z.string()
+});
+export const RevokeUserRoleResponseDataSchema = z.object({
+    userId: z.string().uuid(),
+    roles: z.array(z.string()),
+    message: z.string()
+});
+export const UserEffectivePermissionsResponseDataSchema = z.object({
+    userId: z.string().uuid(),
+    roles: z.array(z.string()),
+    permissions: z.array(z.string())
+});
+export const RolePermissionMutationResponseDataSchema = z.object({
+    roleCode: z.string(),
+    permissions: z.array(z.string()),
+    message: z.string()
+});
+//# sourceMappingURL=index.js.map

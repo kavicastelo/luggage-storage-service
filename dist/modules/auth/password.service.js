@@ -1,0 +1,380 @@
+import crypto from "node:crypto";
+import { eq, sql } from "drizzle-orm";
+import { normalizeEmail } from "@luggage-storage/contracts";
+import { db, schema } from "../../infrastructure/database/drizzle.js";
+import { AppError } from "../../common/errors/app-error.js";
+import { argon2Service } from "./argon2.service.js";
+import { emailService } from "../email/email.service.js";
+import { auditService, SecurityEventType } from "../audit/audit.service.js";
+import { rateLimitService } from "./rate-limit.service.js";
+import { logger } from "../../infrastructure/logging/logger.js";
+export class PasswordService {
+    /**
+     * Clears PostgreSQL-backed rate limits (useful for test isolation).
+     */
+    async clearRateLimits() {
+        await rateLimitService.clearAll();
+    }
+    /**
+     * Rate limits password reset requests using PostgreSQL-backed rate limiting (REM-B03/REM-B04).
+     * Window: 15 minutes, Max: 5 requests per normalized email.
+     */
+    async checkRateLimit(normalizedEmailStr, clientInfo) {
+        if (clientInfo?.ip) {
+            await rateLimitService.enforce({
+                scope: "auth_recovery_ip",
+                identifier: clientInfo.ip,
+                message: "Too many password reset requests. Please try again later.",
+                clientInfo
+            });
+        }
+        await rateLimitService.enforce({
+            scope: "auth_recovery_email",
+            identifier: normalizedEmailStr,
+            message: "Too many password reset requests. Please try again later.",
+            clientInfo
+        });
+    }
+    /**
+     * Authenticated password change.
+     *
+     * Security guarantees:
+     * 1. Requires authenticated active user.
+     * 2. Verifies current password against stored Argon2id hash.
+     * 3. Enforces new password policy and rejects if equal to current password.
+     * 4. Hashes new password with Argon2id (OWASP configuration).
+     * 5. Atomically updates password and revokes all OTHER active sessions for this user.
+     * 6. Preserves the caller's current session.
+     * 7. Records immutable security audit events (never logging passwords).
+     */
+    async changePassword(params) {
+        const [user] = await db
+            .select({
+            id: schema.users.id,
+            passwordHash: schema.users.passwordHash,
+            status: schema.users.status
+        })
+            .from(schema.users)
+            .where(eq(schema.users.id, params.userId))
+            .limit(1);
+        if (!user) {
+            throw AppError.unauthorized("User account not found");
+        }
+        if (user.status === "SUSPENDED") {
+            throw AppError.forbidden("Account is suspended");
+        }
+        if (user.status === "DEACTIVATED") {
+            throw AppError.forbidden("Account is deactivated");
+        }
+        // Verify current password
+        const isCurrentValid = await argon2Service.verifyPassword(user.passwordHash, params.input.currentPassword);
+        if (!isCurrentValid) {
+            await auditService.recordEvent({
+                eventType: SecurityEventType.AUTH_PASSWORD_CHANGE_FAILURE,
+                userId: user.id,
+                clientInfo: params.clientInfo,
+                metadata: {
+                    reason: "INVALID_CURRENT_PASSWORD"
+                }
+            });
+            throw AppError.badRequest("Current password is incorrect");
+        }
+        // Defense-in-depth: new password must not match current password
+        if (params.input.currentPassword === params.input.newPassword) {
+            throw AppError.badRequest("New password cannot be the same as current password");
+        }
+        // Hash new password with Argon2id
+        const newHash = await argon2Service.hashPassword(params.input.newPassword);
+        const now = new Date();
+        // Atomic transaction: update password, revoke all other active sessions, record audit
+        await db.transaction(async (tx) => {
+            // 1. Update password on users table
+            await tx
+                .update(schema.users)
+                .set({
+                passwordHash: newHash,
+                passwordChangedAt: now,
+                updatedAt: now
+            })
+                .where(eq(schema.users.id, user.id));
+            // 2. Revoke all OTHER active sessions for this user
+            await tx.execute(sql `UPDATE auth_sessions 
+            SET revoked_at = NOW(), 
+                revocation_reason = 'PASSWORD_CHANGED', 
+                updated_at = NOW() 
+            WHERE user_id = ${user.id} 
+              AND id != ${params.currentSessionId} 
+              AND revoked_at IS NULL;`);
+            // 3. Record audit event
+            await auditService.recordEvent({
+                eventType: SecurityEventType.AUTH_PASSWORD_CHANGE_SUCCESS,
+                userId: user.id,
+                clientInfo: params.clientInfo,
+                metadata: {
+                    sessionId: params.currentSessionId
+                },
+                tx
+            });
+        });
+        return {
+            message: "Password changed successfully. All other active sessions have been revoked."
+        };
+    }
+    /**
+     * Password recovery request (forgot password).
+     *
+     * Security guarantees:
+     * 1. Strictly enumeration-resistant: returns identical public message whether account exists or not.
+     * 2. Runs dummy Argon2id verification for non-existent accounts to equalize response latency.
+     * 3. Suspended/deactivated accounts do not receive tokens, but return identical public response.
+     * 4. Generates 256-bit cryptographically random token (`crypto.randomBytes(32)`).
+     * 5. Stores only SHA-256 verifier hash in `password_reset_tokens`. Never logs raw token.
+     * 6. Invalidates all previous unused tokens for the user.
+     * 7. Enforces strict 1-hour expiration.
+     * 8. Dispatches via provider-independent email boundary respecting OQ-019.
+     */
+    async requestPasswordReset(params) {
+        const genericResponse = {
+            message: "If an account with that email address exists, a password reset link has been sent."
+        };
+        const normalized = normalizeEmail(params.input.email);
+        // Apply abuse protection rate limiting
+        await this.checkRateLimit(normalized, params.clientInfo);
+        // Look up user by normalized email
+        const [user] = await db
+            .select({
+            id: schema.users.id,
+            email: schema.users.email,
+            displayName: schema.users.displayName,
+            status: schema.users.status
+        })
+            .from(schema.users)
+            .where(eq(schema.users.normalizedEmail, normalized))
+            .limit(1);
+        if (!user) {
+            // Timing attack mitigation: run dummy Argon2id verification
+            await argon2Service.verifyDummy("dummyPassword123!");
+            await auditService.recordEvent({
+                eventType: SecurityEventType.AUTH_PASSWORD_RESET_REQUESTED,
+                userId: null,
+                clientInfo: params.clientInfo,
+                metadata: {
+                    email: normalized,
+                    reason: "ACCOUNT_NOT_FOUND"
+                }
+            });
+            return genericResponse;
+        }
+        // Inactive account handling (enumeration resistant)
+        if (user.status === "SUSPENDED" || user.status === "DEACTIVATED") {
+            await auditService.recordEvent({
+                eventType: SecurityEventType.AUTH_PASSWORD_RESET_REQUESTED,
+                userId: user.id,
+                clientInfo: params.clientInfo,
+                metadata: {
+                    reason: `ACCOUNT_${user.status}`
+                }
+            });
+            return genericResponse;
+        }
+        // Generate 256-bit cryptographically secure raw token
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour TTL
+        // Deliver via email boundary BEFORE invalidating existing unused reset tokens (AUD-002 Section 3.5)
+        const deliveryResult = await emailService.sendPasswordResetEmail({
+            to: user.email,
+            displayName: user.displayName,
+            resetToken: rawToken,
+            resetUrl: `/reset-password?token=${rawToken}`
+        });
+        if (!deliveryResult.delivered) {
+            logger.warn({
+                userId: user.id,
+                provider: deliveryResult.provider,
+                deliveryError: deliveryResult.error
+            }, "[PasswordService] Password reset email delivery failed; preserving existing unused reset token");
+            await auditService.recordEvent({
+                eventType: SecurityEventType.AUTH_PASSWORD_RESET_REQUESTED,
+                userId: user.id,
+                clientInfo: params.clientInfo,
+                metadata: {
+                    delivered: false,
+                    provider: deliveryResult.provider,
+                    deliveryError: deliveryResult.error,
+                    reason: "EMAIL_DELIVERY_FAILED_EXISTING_TOKEN_PRESERVED"
+                }
+            });
+            return genericResponse;
+        }
+        // Invalidate previous outstanding tokens and insert new token transactionally after provider acceptance
+        await db.transaction(async (tx) => {
+            // Invalidate previous tokens
+            await tx.execute(sql `UPDATE password_reset_tokens 
+            SET used_at = NOW() 
+            WHERE user_id = ${user.id} AND used_at IS NULL;`);
+            // Insert new token
+            await tx.insert(schema.passwordResetTokens).values({
+                userId: user.id,
+                tokenHash,
+                expiresAt,
+                usedAt: null
+            });
+            // Record audit event (ZERO raw token leakage)
+            await auditService.recordEvent({
+                eventType: SecurityEventType.AUTH_PASSWORD_RESET_REQUESTED,
+                userId: user.id,
+                clientInfo: params.clientInfo,
+                metadata: {
+                    delivered: true,
+                    provider: deliveryResult.provider,
+                    messageId: deliveryResult.messageId,
+                    expiresAt: expiresAt.toISOString()
+                },
+                tx
+            });
+        });
+        return genericResponse;
+    }
+    /**
+     * Password reset execution.
+     *
+     * Security guarantees:
+     * 1. Looks up token by SHA-256 hash under row-level lock (FOR UPDATE).
+     * 2. Prevents concurrent reuse / race condition double-spends.
+     * 3. Strictly verifies token is unconsumed (`used_at IS NULL`) and not expired.
+     * 4. Updates password hash with Argon2id.
+     * 5. Atomically consumes token (`used_at = NOW()`).
+     * 6. Supersedes any other outstanding recovery tokens for this user.
+     * 7. Revokes ALL active sessions for this user across all devices.
+     * 8. Records immutable audit event.
+     */
+    async resetPassword(params) {
+        const tokenHash = crypto
+            .createHash("sha256")
+            .update(params.input.token)
+            .digest("hex");
+        const newHash = await argon2Service.hashPassword(params.input.newPassword);
+        const now = new Date();
+        const txResult = await db.transaction(async (tx) => {
+            // Row-level lock on token to serialize concurrent requests
+            const result = await tx.execute(sql `SELECT * FROM password_reset_tokens 
+            WHERE token_hash = ${tokenHash} 
+            FOR UPDATE;`);
+            if (result.rows.length === 0) {
+                await auditService.recordEvent({
+                    eventType: SecurityEventType.AUTH_PASSWORD_RESET_FAILURE,
+                    userId: null,
+                    clientInfo: params.clientInfo,
+                    metadata: { reason: "TOKEN_NOT_FOUND" },
+                    tx
+                });
+                return { status: "INVALID_TOKEN" };
+            }
+            const rawRow = result.rows[0];
+            const tokenRow = {
+                id: rawRow.id,
+                userId: rawRow.user_id,
+                expiresAt: new Date(rawRow.expires_at),
+                usedAt: rawRow.used_at ? new Date(rawRow.used_at) : null
+            };
+            if (tokenRow.usedAt !== null) {
+                await auditService.recordEvent({
+                    eventType: SecurityEventType.AUTH_PASSWORD_RESET_FAILURE,
+                    userId: tokenRow.userId,
+                    clientInfo: params.clientInfo,
+                    metadata: { reason: "TOKEN_ALREADY_USED" },
+                    tx
+                });
+                return { status: "TOKEN_ALREADY_USED" };
+            }
+            if (tokenRow.expiresAt < now) {
+                await auditService.recordEvent({
+                    eventType: SecurityEventType.AUTH_PASSWORD_RESET_FAILURE,
+                    userId: tokenRow.userId,
+                    clientInfo: params.clientInfo,
+                    metadata: { reason: "TOKEN_EXPIRED" },
+                    tx
+                });
+                return { status: "TOKEN_EXPIRED" };
+            }
+            // Check user account status
+            const userRes = await tx
+                .select({ id: schema.users.id, status: schema.users.status })
+                .from(schema.users)
+                .where(eq(schema.users.id, tokenRow.userId))
+                .limit(1);
+            if (userRes.length === 0) {
+                return { status: "USER_NOT_FOUND" };
+            }
+            const user = userRes[0];
+            if (user.status === "SUSPENDED") {
+                return { status: "ACCOUNT_SUSPENDED" };
+            }
+            if (user.status === "DEACTIVATED") {
+                return { status: "ACCOUNT_DEACTIVATED" };
+            }
+            // 1. Mark token as consumed
+            await tx
+                .update(schema.passwordResetTokens)
+                .set({ usedAt: now })
+                .where(eq(schema.passwordResetTokens.id, tokenRow.id));
+            // 2. Invalidate any other outstanding tokens for this user
+            await tx.execute(sql `UPDATE password_reset_tokens 
+            SET used_at = NOW() 
+            WHERE user_id = ${tokenRow.userId} 
+              AND id != ${tokenRow.id} 
+              AND used_at IS NULL;`);
+            // 3. Update password on users table
+            await tx
+                .update(schema.users)
+                .set({
+                passwordHash: newHash,
+                passwordChangedAt: now,
+                updatedAt: now
+            })
+                .where(eq(schema.users.id, tokenRow.userId));
+            // 4. Revoke ALL active sessions for this user across all devices
+            await tx.execute(sql `UPDATE auth_sessions 
+            SET revoked_at = NOW(), 
+                revocation_reason = 'PASSWORD_RESET', 
+                updated_at = NOW() 
+            WHERE user_id = ${tokenRow.userId} 
+              AND revoked_at IS NULL;`);
+            // 5. Record audit event
+            await auditService.recordEvent({
+                eventType: SecurityEventType.AUTH_PASSWORD_RESET_COMPLETED,
+                userId: tokenRow.userId,
+                clientInfo: params.clientInfo,
+                metadata: {
+                    resetTokenId: tokenRow.id
+                },
+                tx
+            });
+            return { status: "SUCCESS" };
+        });
+        if (txResult.status === "INVALID_TOKEN") {
+            throw AppError.badRequest("Invalid or expired password reset token");
+        }
+        if (txResult.status === "TOKEN_ALREADY_USED") {
+            throw AppError.badRequest("Invalid or expired password reset token");
+        }
+        if (txResult.status === "TOKEN_EXPIRED") {
+            throw AppError.badRequest("Invalid or expired password reset token");
+        }
+        if (txResult.status === "USER_NOT_FOUND") {
+            throw AppError.badRequest("Invalid or expired password reset token");
+        }
+        if (txResult.status === "ACCOUNT_SUSPENDED") {
+            throw AppError.forbidden("Account is suspended");
+        }
+        if (txResult.status === "ACCOUNT_DEACTIVATED") {
+            throw AppError.forbidden("Account is deactivated");
+        }
+        return {
+            message: "Password has been reset successfully. All active sessions have been revoked."
+        };
+    }
+}
+export const passwordService = new PasswordService();
+//# sourceMappingURL=password.service.js.map

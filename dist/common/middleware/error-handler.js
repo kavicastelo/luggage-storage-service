@@ -1,0 +1,54 @@
+import { ZodError } from "zod";
+import { createErrorResponse } from "@luggage-storage/contracts";
+import { AppError } from "../errors/app-error.js";
+export function errorHandler(error, request, reply) {
+    const correlationId = request.id;
+    if (error instanceof AppError) {
+        request.log.warn({ err: error, correlationId }, `AppError [${error.code}]: ${error.message}`);
+        if (error.retryAfterSeconds !== undefined) {
+            reply.header("Retry-After", String(error.retryAfterSeconds));
+        }
+        return reply.status(error.statusCode).send(createErrorResponse(error.code, error.message, error.details, correlationId));
+    }
+    // Zod validation errors
+    if (error instanceof ZodError || error.name === "ZodError") {
+        const zodError = error;
+        const details = zodError.issues.map((i) => ({
+            field: i.path.join(".") || undefined,
+            message: i.message,
+            code: "VALIDATION_ERROR"
+        }));
+        return reply.status(400).send(createErrorResponse("VALIDATION_ERROR", "Request validation failed", details, correlationId));
+    }
+    // Fastify validation errors
+    if ("validation" in error && error.validation) {
+        const details = error.validation.map((v) => {
+            const rawField = v.instancePath || v.params?.missingProperty?.toString() || "";
+            const field = rawField.replace(/^\//, "");
+            return {
+                field: field || undefined,
+                message: v.message || "Invalid input",
+                code: "VALIDATION_ERROR"
+            };
+        });
+        return reply.status(400).send(createErrorResponse("VALIDATION_ERROR", "Request validation failed", details, correlationId));
+    }
+    // Preserve native Fastify 4xx protocol errors (e.g. 413 Payload Too Large, 415 Unsupported Media Type)
+    if ("statusCode" in error &&
+        typeof error.statusCode === "number" &&
+        error.statusCode >= 400 &&
+        error.statusCode < 500) {
+        request.log.warn({ err: error, correlationId }, `Client request error [${error.statusCode}]: ${error.message}`);
+        return reply
+            .status(error.statusCode)
+            .send(createErrorResponse("BAD_REQUEST", error.message || "Invalid request payload", undefined, correlationId));
+    }
+    // Generic 500
+    request.log.error({ err: error, correlationId }, "Unhandled internal server error");
+    return reply.status(500).send(createErrorResponse("INTERNAL_SERVER_ERROR", "An unexpected error occurred", undefined, correlationId));
+}
+export function notFoundHandler(request, reply) {
+    const correlationId = request.id;
+    return reply.status(404).send(createErrorResponse("NOT_FOUND", `Route ${request.method}:${request.url} not found`, undefined, correlationId));
+}
+//# sourceMappingURL=error-handler.js.map
